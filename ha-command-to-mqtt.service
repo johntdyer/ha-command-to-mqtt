@@ -1,0 +1,22 @@
+[Unit]
+Description=HA Command to MQTT
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/ha-command-to-mqtt
+ExecStart=/opt/ha-command-to-mqtt/ha-command-to-mqtt --config /opt/ha-command-to-mqtt/config.yaml --log-level info
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Optional: Set environment variables for configuration
+# Environment=HA_MQTT_CONFIG=/opt/ha-command-to-mqtt/config.yaml
+# Environment=HA_MQTT_LOG_LEVEL=info
+
+[Install]
+WantedBy=multi-user.target

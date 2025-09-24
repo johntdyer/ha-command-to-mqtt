@@ -1,0 +1,52 @@
+# Simple configuration example without SSH servers
+# This shows how to use ha-command-to-mqtt with only local commands
+
+# MQTT Configuration
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "ha-command-to-mqtt"
+
+# SSH Configuration is completely optional - you can omit this section entirely
+# or leave it empty like this:
+ssh:
+  hosts: []
+
+# Commands to execute locally
+commands:
+  - name: "CPU Temperature"
+    command: "cat /sys/class/thermal/thermal_zone0/temp"
+    frequency: "30s"
+    device_class: "temperature"
+    unit: "°C"
+    icon: "mdi:thermometer"
+    state_class: "measurement"
+
+  - name: "System Uptime"
+    command: "uptime -p"
+    frequency: "5m"
+    icon: "mdi:clock-outline"
+
+  - name: "Disk Usage Root"
+    command: "df -h / | awk 'NR==2{print $5}' | sed 's/%//'"
+    frequency: "10m"
+    unit: "%"
+    icon: "mdi:harddisk"
+    state_class: "measurement"
+
+  - name: "Memory Usage"
+    command: "free | grep Mem | awk '{printf \"%.1f\", $3/$2 * 100.0}'"
+    frequency: "1m"
+    unit: "%"
+    device_class: "battery"
+    icon: "mdi:memory"
+    state_class: "measurement"
+
+  # Explicitly specify local execution (same as not specifying target_host)
+  - name: "Local CPU Usage"
+    command: "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"
+    frequency: "30s"
+    target_host: "local"
+    icon: "mdi:cpu-64-bit"

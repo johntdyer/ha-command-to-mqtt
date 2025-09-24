@@ -1,0 +1,85 @@
+# MQTT Configuration
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "ha-command-to-mqtt"
+
+# SSH Configuration (optional)
+ssh:
+  hosts:
+    - name: "server1"
+      host: "192.168.1.100"
+      port: 22
+      user: "pi"
+      key_path: "/home/user/.ssh/id_rsa"
+      timeout: "30s"
+
+    - name: "server2"
+      host: "example.com"
+      port: 2222
+      user: "ubuntu"
+      key_path: "/home/user/.ssh/id_ed25519"
+      timeout: "10s"
+
+# Commands to execute and publish
+commands:
+  - name: "CPU Temperature"
+    command: "cat /sys/class/thermal/thermal_zone0/temp"
+    frequency: "30s"
+    device_class: "temperature"
+    unit: "°C"
+    icon: "mdi:thermometer"
+    state_class: "measurement"
+    expire_after: 120
+
+  - name: "System Uptime"
+    command: "uptime -p"
+    frequency: "5m"
+    icon: "mdi:clock-outline"
+
+  - name: "Disk Usage Root"
+    command: "df -h / | awk 'NR==2{print $5}' | sed 's/%//'"
+    frequency: "10m"
+    unit: "%"
+    icon: "mdi:harddisk"
+    state_class: "measurement"
+    entity_category: "diagnostic"
+
+  - name: "Memory Usage"
+    command: "free | grep Mem | awk '{printf \"%.1f\", $3/$2 * 100.0}'"
+    frequency: "1m"
+    unit: "%"
+    device_class: "battery"
+    icon: "mdi:memory"
+    state_class: "measurement"
+    force_update: true
+
+  - name: "Load Average"
+    command: "uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'"
+    frequency: "30s"
+    icon: "mdi:speedometer"
+    state_class: "measurement"
+    expire_after: 90
+
+  # Remote Command Examples
+  - name: "Remote Server CPU"
+    command: "cat /proc/loadavg | awk '{print $1}'"
+    frequency: "1m"
+    target_host: "server1"
+    icon: "mdi:server"
+
+  - name: "Remote Disk Space"
+    command: "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'"
+    frequency: "5m"
+    target_host: "server2"
+    unit: "%"
+    icon: "mdi:harddisk"
+
+  # Explicit local command (optional, same as not specifying target_host)
+  - name: "Local CPU Usage"
+    command: "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"
+    frequency: "30s"
+    target_host: "local"
+    icon: "mdi:cpu-64-bit"

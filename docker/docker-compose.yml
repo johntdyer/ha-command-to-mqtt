@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  ha-command-to-mqtt:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ha-command-to-mqtt
+    restart: unless-stopped
+    volumes:
+      - ../config.yaml:/root/config.yaml:ro
+    environment:
+      - FOO=bar
+      # Alternative: use environment variables instead of config.yaml
+      # - MQTT_BROKER=mosquitto
+      # - MQTT_PORT=1883
+      # - MQTT_USERNAME=
+      # - MQTT_PASSWORD=
+      # - MQTT_CLIENT_ID=ha-command-to-mqtt
+      # - COMMAND_CPU_TEMP=cat /sys/class/thermal/thermal_zone0/temp
+      # - COMMAND_CPU_TEMP_FREQUENCY=30s
+      # - COMMAND_CPU_TEMP_DEVICE_CLASS=temperature
+      # - COMMAND_CPU_TEMP_UNIT=°C
+      # - COMMAND_CPU_TEMP_ICON=mdi:thermometer
+    depends_on:
+      - mosquitto
+    networks:
+      - homeassistant
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ../mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - homeassistant
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  homeassistant:
+    external: true

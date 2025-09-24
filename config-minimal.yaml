@@ -1,0 +1,26 @@
+# Minimal configuration example without SSH section
+# This shows how to use ha-command-to-mqtt with only local commands
+# and no SSH configuration at all
+
+# MQTT Configuration
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "ha-command-to-mqtt"
+
+# No SSH section needed - it's completely optional!
+
+# Commands to execute locally
+commands:
+  - name: "System Uptime"
+    command: "uptime -p"
+    frequency: "5m"
+    icon: "mdi:clock-outline"
+
+  - name: "Local CPU Usage"
+    command: "echo '42.5%'"  # Simple test command that works everywhere
+    frequency: "30s"
+    target_host: "local"
+    icon: "mdi:cpu-64-bit"

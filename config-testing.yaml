@@ -1,0 +1,44 @@
+# MQTT Configuration
+mqtt:
+  broker: "192.168.120.254"
+  port: 1883
+  # username: ""
+  # password: ""
+  client_id: "ha-command-to-mqtt"
+
+# SSH Configuration (optional)
+ssh:
+  hosts:
+    - name: "router"
+      host: "192.168.100.1"
+      port: 22
+      user: "root"
+      key_path: "/config/.ssh/id_rsa_monitoring"
+      timeout: "120s"
+
+#     - name: "server2"
+#       host: "example.com"
+#       port: 2222
+#       user: "ubuntu"
+#       key_path: "/home/user/.ssh/id_ed25519"
+#       timeout: "10s"
+
+# Commands to execute and publish
+commands:
+
+  - name: "Disk Usage Root"
+    command: "df -h / | awk 'NR==2{print $5}' | sed 's/%//'"
+    frequency: "10m"
+    unit: "%"
+    icon: "mdi:harddisk"
+    state_class: "measurement"
+    entity_category: "diagnostic"
+
+  - name: "Unifi Firmware Version"
+    command: "ubnt-device-info firmware detail"
+    frequency: "10m"
+    icon: "ix:firmware"
+    entity_category: "diagnostic"
+    target_host: "router"
+
+

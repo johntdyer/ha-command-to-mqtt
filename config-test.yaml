@@ -1,0 +1,38 @@
+# Test configuration with local commands only
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "ha-command-to-mqtt-test"
+
+# SSH Configuration (for testing, no actual connections will be made)
+ssh:
+  hosts:
+    - name: "test-server"
+      host: "127.0.0.1"
+      port: 22
+      user: "test"
+      key_path: "/nonexistent/key"
+      timeout: "5s"
+
+commands:
+  # Local test command
+  - name: "Test Local Date"
+    command: "date +%s"
+    frequency: "10s"
+    icon: "mdi:clock"
+
+  # This would be a remote command but will fail gracefully
+  - name: "Test Remote Command"
+    command: "echo 'This is a test'"
+    frequency: "15s"
+    target_host: "test-server"
+    icon: "mdi:server"
+
+  # Explicit local command
+  - name: "Test Explicit Local"
+    command: "echo 'Local command'"
+    frequency: "20s"
+    target_host: "local"
+    icon: "mdi:laptop"

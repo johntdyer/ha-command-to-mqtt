@@ -1,0 +1,75 @@
+name: "Command to MQTT"
+description: "Execute commands and publish results to MQTT for Home Assistant sensor discovery"
+version: "1.0.0"
+slug: "command-to-mqtt"
+init: false
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+startup: services
+boot: auto
+hassio_api: false
+homeassistant_api: false
+host_network: false
+privileged: false
+full_access: false
+map:
+  - share:rw
+  - ssl:ro
+  - config:ro
+options:
+  mqtt:
+    broker: "core-mosquitto"
+    port: 1883
+    username: ""
+    password: ""
+    client_id: "ha-command-to-mqtt"
+    discovery_prefix: "homeassistant"
+  commands:
+    - name: "uptime"
+      command: "uptime"
+      topic: "system/uptime"
+      interval: "60s"
+      unit_of_measurement: ""
+      device_class: ""
+      state_class: ""
+      entity_category: ""
+      force_update: false
+  ssh:
+    hosts: []
+  log_level: "info"
+  log_format: "text"
+schema:
+  mqtt:
+    broker: str
+    port: port
+    username: str?
+    password: password?
+    client_id: str
+    discovery_prefix: str?
+  commands:
+    - name: str
+      command: str
+      topic: str
+      interval: str
+      target_host: str?
+      unit_of_measurement: str?
+      device_class: str?
+      state_class: str?
+      entity_category: str?
+      force_update: bool?
+  ssh:
+    hosts:
+      - name: str?
+        host: str?
+        port: port?
+        user: str?
+        key_path: str?
+        password: password?
+        timeout: str?
+  log_level: list(debug|info|warn|error)?
+  log_format: list(text|json|logfmt)?
+image: "ghcr.io/jdyer/ha-command-to-mqtt"

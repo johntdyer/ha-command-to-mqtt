@@ -1,0 +1,91 @@
+# Comprehensive Home Assistant MQTT Configuration Example
+mqtt:
+  broker: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "ha-command-to-mqtt"
+
+ssh:
+  hosts:
+    - name: "server1"
+      host: "192.168.1.100"
+      port: 22
+      user: "pi"
+      key_path: "/home/user/.ssh/id_rsa"
+      timeout: "30s"
+
+commands:
+  # Temperature sensor with measurement state class and expiry
+  - name: "CPU Temperature"
+    command: "cat /sys/class/thermal/thermal_zone0/temp"
+    frequency: "30s"
+    device_class: "temperature"
+    unit: "°C"
+    icon: "mdi:thermometer"
+    state_class: "measurement"
+    expire_after: 120
+
+  # Battery-like percentage with force update
+  - name: "Memory Usage"
+    command: "free | grep Mem | awk '{printf \"%.1f\", $3/$2 * 100.0}'"
+    frequency: "1m"
+    unit: "%"
+    device_class: "battery"
+    icon: "mdi:memory"
+    state_class: "measurement"
+    force_update: true
+
+  # Diagnostic entity with measurement
+  - name: "Disk Usage"
+    command: "df -h / | awk 'NR==2{print $5}' | sed 's/%//'"
+    frequency: "5m"
+    unit: "%"
+    icon: "mdi:harddisk"
+    state_class: "measurement"
+    entity_category: "diagnostic"
+
+  # Total increasing counter (network bytes)
+  - name: "Network Bytes Sent"
+    command: "cat /sys/class/net/eth0/statistics/tx_bytes"
+    frequency: "1m"
+    device_class: "data_size"
+    unit: "B"
+    icon: "mdi:upload-network"
+    state_class: "total_increasing"
+
+  # Simple total value
+  - name: "Process Count"
+    command: "ps aux | wc -l"
+    frequency: "2m"
+    icon: "mdi:format-list-numbered"
+    state_class: "total"
+    entity_category: "diagnostic"
+
+  # Remote server monitoring with all attributes
+  - name: "Remote Server Load"
+    command: "uptime | awk -F'load average:' '{print $1}' | awk '{print $NF}'"
+    frequency: "1m"
+    target_host: "server1"
+    icon: "mdi:server"
+    state_class: "measurement"
+    force_update: true
+    expire_after: 180
+
+  # Status sensor without numeric state class
+  - name: "Service Status"
+    command: "systemctl is-active sshd"
+    frequency: "5m"
+    icon: "mdi:check-circle"
+    entity_category: "diagnostic"
+    force_update: true
+
+  # Power measurement
+  - name: "System Power Usage"
+    command: "echo '50.5'"  # Placeholder command
+    frequency: "30s"
+    device_class: "power"
+    unit: "W"
+    icon: "mdi:flash"
+    state_class: "measurement"
+    expire_after: 90
