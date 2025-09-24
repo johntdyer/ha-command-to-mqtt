@@ -62,7 +62,7 @@ jobs:
         gosec -fmt json -out gosec-report.json ./...
 
     - name: Upload gosec report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: gosec-report
@@ -153,9 +153,9 @@ jobs:
         go-licenses report ./... --template=licenses.tpl > LICENSES.md || true
 
     - name: Upload license report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: license-report
+        name: license-report-${{ matrix.runs-on }}
         path: LICENSES.md
 
   # CodeQL analysis

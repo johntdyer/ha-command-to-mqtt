@@ -109,11 +109,11 @@ jobs:
         if [ "$GOOS" = "windows" ]; then
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
-        
+
         # Build with version info
         VERSION=${GITHUB_REF_NAME:-dev}
         LDFLAGS="-w -s -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        
+
         # Create output filename
         OUTPUT_NAME="${BINARY_NAME}"
         if [ -n "$GOARM" ]; then
@@ -121,10 +121,10 @@ jobs:
         else
           OUTPUT_NAME="${GOOS}-${GOARCH}-${BINARY_NAME}"
         fi
-        
+
         # Build the binary
         go build -ldflags="${LDFLAGS}" -o "dist/${OUTPUT_NAME}" .
-        
+
         # Make executable on Unix systems
         if [ "$GOOS" != "windows" ]; then
           chmod +x "dist/${OUTPUT_NAME}"
@@ -199,14 +199,14 @@ jobs:
     - name: Build add-on binaries
       run: |
         mkdir -p addon-dist
-        
+
         # Build for Home Assistant supported architectures
         ARCHITECTURES="linux/amd64 linux/arm64 linux/arm/v7 linux/arm/v6 linux/386"
-        
+
         for ARCH in $ARCHITECTURES; do
           GOOS=$(echo $ARCH | cut -d'/' -f1)
           GOARCH=$(echo $ARCH | cut -d'/' -f2)
-          
+
           if [[ $GOARCH == arm* ]]; then
             GOARM=$(echo $GOARCH | sed 's/arm//' | sed 's/v//')
             GOARCH=arm
@@ -214,17 +214,17 @@ jobs:
           else
             GOARM_FLAG=""
           fi
-          
+
           OUTPUT_NAME="ha-command-to-mqtt-$(echo $ARCH | sed 's/\//-/g')"
-          
+
           echo "Building for $ARCH..."
           env GOOS=$GOOS GOARCH=$GOARCH $GOARM_FLAG CGO_ENABLED=0 \
             go build -ldflags="-w -s" -o "addon-dist/$OUTPUT_NAME" .
         done
-        
+
         # Copy add-on files
         cp -r addon/* addon-dist/
-        
+
         # Create a local build for testing
         go build -o addon-dist/ha-command-to-mqtt .
 
@@ -246,14 +246,14 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: artifacts
 
     - name: Prepare release assets
       run: |
         mkdir -p release-assets
-        
+
         # Package binaries
         for dir in artifacts/binaries-*; do
           if [ -d "$dir" ]; then
@@ -272,14 +272,14 @@ jobs:
             cd - > /dev/null
           fi
         done
-        
+
         # Package add-on
         if [ -d "artifacts/ha-addon" ]; then
           cd artifacts/ha-addon
           tar -czf "../../release-assets/homeassistant-addon.tar.gz" .
           cd - > /dev/null
         fi
-        
+
         # Create checksums
         cd release-assets
         sha256sum * > checksums.txt
