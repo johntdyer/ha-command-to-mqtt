@@ -229,9 +229,9 @@ jobs:
         go build -o addon-dist/ha-command-to-mqtt .
 
     - name: Upload add-on artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: ha-addon
+        name: ha-addon-${{ matrix.runs-on }}
         path: addon-dist/
         retention-days: 30
 
@@ -249,7 +249,8 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: artifacts
-
+        pattern: artifacts-*
+        merge-multiple: true
     - name: Prepare release assets
       run: |
         mkdir -p release-assets
