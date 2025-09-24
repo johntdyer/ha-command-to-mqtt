@@ -1,0 +1,72 @@
+# golangci-lint configuration
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  gocyclo:
+    min-complexity: 15
+
+  golint:
+    min-confidence: 0.8
+
+  govet:
+    enable-all: true
+
+  lll:
+    line-length: 120
+
+  misspell:
+    locale: US
+
+  unused:
+    check-exported: false
+
+  whitespace:
+    multi-if: false
+    multi-func: false
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - lll
+    - misspell
+    - unconvert
+    - whitespace
+    - prealloc
+    - predeclared
+    - nolintlint
+
+  disable:
+    - deadcode
+    - structcheck
+    - varcheck
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+        - lll
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

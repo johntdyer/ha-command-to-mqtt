@@ -38,7 +38,7 @@ EOF
 if bashio::config.exists 'ssh.hosts'; then
     echo "ssh:" >> "${CONFIG_PATH}"
     echo "  hosts:" >> "${CONFIG_PATH}"
-    
+
     # Parse SSH hosts from JSON array
     for host in $(bashio::config 'ssh.hosts | keys[]'); do
         name=$(bashio::config "ssh.hosts[${host}].name")
@@ -48,22 +48,22 @@ if bashio::config.exists 'ssh.hosts'; then
         key_path=$(bashio::config "ssh.hosts[${host}].key_path" "")
         password=$(bashio::config "ssh.hosts[${host}].password" "")
         timeout=$(bashio::config "ssh.hosts[${host}].timeout" "30s")
-        
+
         cat >> "${CONFIG_PATH}" << EOF
     - name: "${name}"
       host: "${hostname}"
       port: ${port}
       user: "${user}"
 EOF
-        
+
         if [ -n "${key_path}" ]; then
             echo "      key_path: \"${key_path}\"" >> "${CONFIG_PATH}"
         fi
-        
+
         if [ -n "${password}" ]; then
             echo "      password: \"${password}\"" >> "${CONFIG_PATH}"
         fi
-        
+
         echo "      timeout: \"${timeout}\"" >> "${CONFIG_PATH}"
     done
 fi
@@ -83,7 +83,7 @@ for command in $(bashio::config 'commands | keys[]'); do
     state_class=$(bashio::config "commands[${command}].state_class" "")
     entity_category=$(bashio::config "commands[${command}].entity_category" "")
     force_update=$(bashio::config "commands[${command}].force_update" "false")
-    
+
     cat >> "${CONFIG_PATH}" << EOF
   - name: "${name}"
     command: "${cmd}"
@@ -91,23 +91,23 @@ for command in $(bashio::config 'commands | keys[]'); do
     interval: "${interval}"
     target_host: "${target_host}"
 EOF
-    
+
     if [ -n "${unit_of_measurement}" ]; then
         echo "    unit_of_measurement: \"${unit_of_measurement}\"" >> "${CONFIG_PATH}"
     fi
-    
+
     if [ -n "${device_class}" ]; then
         echo "    device_class: \"${device_class}\"" >> "${CONFIG_PATH}"
     fi
-    
+
     if [ -n "${state_class}" ]; then
         echo "    state_class: \"${state_class}\"" >> "${CONFIG_PATH}"
     fi
-    
+
     if [ -n "${entity_category}" ]; then
         echo "    entity_category: \"${entity_category}\"" >> "${CONFIG_PATH}"
     fi
-    
+
     echo "    force_update: ${force_update}" >> "${CONFIG_PATH}"
 done
 

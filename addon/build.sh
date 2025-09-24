@@ -22,14 +22,6 @@ ARCHITECTURES=(
     "linux-386"
 )
 
-# Architecture mapping for Go builds
-declare -A GO_ARCH_MAP
-GO_ARCH_MAP["linux-amd64"]="GOOS=linux GOARCH=amd64"
-GO_ARCH_MAP["linux-arm64"]="GOOS=linux GOARCH=arm64" 
-GO_ARCH_MAP["linux-armv7"]="GOOS=linux GOARCH=arm GOARM=7"
-GO_ARCH_MAP["linux-armv6"]="GOOS=linux GOARCH=arm GOARM=6"
-GO_ARCH_MAP["linux-386"]="GOOS=linux GOARCH=386"
-
 # Clean previous builds
 echo "Cleaning previous builds..."
 rm -f "${ADDON_DIR}/ha-command-to-mqtt"*
@@ -44,18 +36,39 @@ echo "✅ Local build complete: ${ADDON_DIR}/ha-command-to-mqtt"
 # Function to build for specific architecture
 build_arch() {
     local arch=$1
-    local go_env=${GO_ARCH_MAP[$arch]}
     local output_name="ha-command-to-mqtt-${arch}"
-    
+
     echo "Building for ${arch}..."
     cd "${PROJECT_DIR}"
-    
-    # Set Go environment and build
-    env ${go_env} CGO_ENABLED=0 go build \
-        -o "${ADDON_DIR}/${output_name}" \
-        -ldflags="-w -s" \
-        .
-    
+
+    # Set Go environment based on architecture
+    case $arch in
+        "linux-amd64")
+            env GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+                -o "${ADDON_DIR}/${output_name}" -ldflags="-w -s" .
+            ;;
+        "linux-arm64")
+            env GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+                -o "${ADDON_DIR}/${output_name}" -ldflags="-w -s" .
+            ;;
+        "linux-armv7")
+            env GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build \
+                -o "${ADDON_DIR}/${output_name}" -ldflags="-w -s" .
+            ;;
+        "linux-armv6")
+            env GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build \
+                -o "${ADDON_DIR}/${output_name}" -ldflags="-w -s" .
+            ;;
+        "linux-386")
+            env GOOS=linux GOARCH=386 CGO_ENABLED=0 go build \
+                -o "${ADDON_DIR}/${output_name}" -ldflags="-w -s" .
+            ;;
+        *)
+            echo "❌ Unknown architecture: ${arch}"
+            return 1
+            ;;
+    esac
+
     echo "✅ Built: ${output_name}"
 }
 

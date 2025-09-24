@@ -1,0 +1,233 @@
+name: Home Assistant Add-on Release
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Add-on version'
+        required: true
+        default: '1.0.0'
+
+env:
+  ADDON_SLUG: "command-to-mqtt"
+
+jobs:
+  build-addon:
+    name: Build HA Add-on
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: ["aarch64", "amd64", "armhf", "armv7", "i386"]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build Go binary for architecture
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        case "${{ matrix.arch }}" in
+          aarch64)
+            GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+              -ldflags="-w -s -X main.Version=${VERSION}" \
+              -o addon/ha-command-to-mqtt .
+            ;;
+          amd64)
+            GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+              -ldflags="-w -s -X main.Version=${VERSION}" \
+              -o addon/ha-command-to-mqtt .
+            ;;
+          armhf|armv7)
+            GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build \
+              -ldflags="-w -s -X main.Version=${VERSION}" \
+              -o addon/ha-command-to-mqtt .
+            ;;
+          i386)
+            GOOS=linux GOARCH=386 CGO_ENABLED=0 go build \
+              -ldflags="-w -s -X main.Version=${VERSION}" \
+              -o addon/ha-command-to-mqtt .
+            ;;
+        esac
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push add-on
+      uses: docker/build-push-action@v5
+      with:
+        context: ./addon
+        file: ./addon/Dockerfile
+        platforms: linux/${{ matrix.arch == 'armhf' && 'arm/v6' || matrix.arch == 'armv7' && 'arm/v7' || matrix.arch == 'aarch64' && 'arm64' || matrix.arch }}
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/${{ env.ADDON_SLUG }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          ghcr.io/${{ github.repository_owner }}/${{ env.ADDON_SLUG }}:latest-${{ matrix.arch }}
+        labels: |
+          org.opencontainers.image.title=Command to MQTT Add-on
+          org.opencontainers.image.description=Execute commands and publish results to MQTT for Home Assistant
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.licenses=MIT
+
+  create-manifest:
+    name: Create Multi-arch Manifest
+    runs-on: ubuntu-latest
+    needs: build-addon
+    steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create and push manifest
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        REPO="ghcr.io/${{ github.repository_owner }}/${{ env.ADDON_SLUG }}"
+        
+        # Create versioned manifest
+        docker manifest create ${REPO}:${VERSION} \
+          ${REPO}:${VERSION}-aarch64 \
+          ${REPO}:${VERSION}-amd64 \
+          ${REPO}:${VERSION}-armhf \
+          ${REPO}:${VERSION}-armv7 \
+          ${REPO}:${VERSION}-i386
+        
+        docker manifest push ${REPO}:${VERSION}
+        
+        # Create latest manifest
+        docker manifest create ${REPO}:latest \
+          ${REPO}:latest-aarch64 \
+          ${REPO}:latest-amd64 \
+          ${REPO}:latest-armhf \
+          ${REPO}:latest-armv7 \
+          ${REPO}:latest-i386
+        
+        docker manifest push ${REPO}:latest
+
+  release-addon:
+    name: Release Add-on Package
+    runs-on: ubuntu-latest
+    needs: create-manifest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Update add-on configuration
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Update version in config.yaml
+        sed -i "s/^version: .*/version: \"${VERSION}\"/" addon/config.yaml
+        
+        # Update image reference
+        sed -i "s|^image: .*|image: \"ghcr.io/${{ github.repository_owner }}/${{ env.ADDON_SLUG }}\"| " addon/config.yaml
+
+    - name: Create add-on package
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Create release directory
+        mkdir -p release/${{ env.ADDON_SLUG }}
+        
+        # Copy add-on files (exclude build artifacts)
+        cp addon/config.yaml release/${{ env.ADDON_SLUG }}/
+        cp addon/DOCS.md release/${{ env.ADDON_SLUG }}/
+        cp addon/Dockerfile release/${{ env.ADDON_SLUG }}/
+        cp addon/run.sh release/${{ env.ADDON_SLUG }}/
+        cp addon/icon.svg release/${{ env.ADDON_SLUG }}/icon.png
+        
+        # Create repository structure
+        cat > release/repository.yaml << EOF
+        name: "Command to MQTT Add-on Repository"
+        url: "https://github.com/${{ github.repository }}"
+        maintainer: "${{ github.repository_owner }}"
+        EOF
+        
+        # Create README for the repository
+        cat > release/README.md << EOF
+        # Home Assistant Add-on Repository
+        
+        ## Add-ons
+        
+        - **Command to MQTT**: Execute commands and publish results to MQTT for Home Assistant sensor discovery
+        
+        ## Installation
+        
+        Add this repository to your Home Assistant add-on store:
+        
+        1. Go to Supervisor → Add-on Store → ⋮ → Repositories
+        2. Add: \`https://github.com/${{ github.repository }}\`
+        3. Install "Command to MQTT" add-on
+        
+        ## Version: ${VERSION}
+        EOF
+        
+        # Create archive
+        cd release
+        tar -czf "../homeassistant-addon-${VERSION}.tar.gz" .
+        cd ..
+
+    - name: Upload release asset
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: homeassistant-addon-*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: homeassistant-addon-package
+        path: homeassistant-addon-*.tar.gz

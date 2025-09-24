@@ -1,5 +1,11 @@
 # HA Command to MQTT
 
+[![CI](https://github.com/yourusername/ha-command-to-mqtt/workflows/CI/badge.svg)](https://github.com/yourusername/ha-command-to-mqtt/actions/workflows/ci.yml)
+[![Quality](https://github.com/yourusername/ha-command-to-mqtt/workflows/Quality/badge.svg)](https://github.com/yourusername/ha-command-to-mqtt/actions/workflows/quality.yml)
+[![Release](https://github.com/yourusername/ha-command-to-mqtt/workflows/Release%20Management/badge.svg)](https://github.com/yourusername/ha-command-to-mqtt/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/yourusername/ha-command-to-mqtt)](https://goreportcard.com/report/github.com/yourusername/ha-command-to-mqtt)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A Go application that executes system commands and publishes their results to MQTT topics with Home Assistant auto-discovery support.
 
 ## Features
@@ -270,10 +276,10 @@ The easiest way to use this application is as a Home Assistant add-on:
    # Clone the repository
    git clone https://github.com/yourusername/ha-command-to-mqtt.git
    cd ha-command-to-mqtt
-   
+
    # Build the add-on
    ./addon/build.sh
-   
+
    # Copy to Home Assistant addons directory
    scp -r addon/ root@your-ha-ip:/addons/command-to-mqtt/
    ```
@@ -560,6 +566,79 @@ sudo systemctl enable ha-command-to-mqtt
 sudo systemctl start ha-command-to-mqtt
 ```
 
+## Development and CI/CD
+
+This project includes a comprehensive CI/CD pipeline system using GitHub Actions.
+
+### Automated Workflows
+
+- **CI Pipeline** (`ci.yml`): Automated testing, building, and deployment
+  - Go testing with multiple platforms (Linux, macOS, Windows)
+  - Multi-architecture Docker image builds
+  - Home Assistant add-on building and testing
+  - Automated releases with GitHub Releases
+
+- **Quality Assurance** (`quality.yml`): Code quality and security scanning
+  - `golangci-lint` for Go code quality
+  - `gosec` for security vulnerability scanning
+  - Trivy for Docker image vulnerability scanning
+  - CodeQL for advanced code analysis
+  - Dependency vulnerability monitoring
+
+- **Release Management** (`release.yml`): Automated release creation
+  - Multi-platform binary builds (Linux, macOS, Windows)
+  - Home Assistant add-on package creation
+  - Automated changelog generation
+  - Release asset creation and publishing
+
+- **Dependency Management** (`dependencies.yml`): Automated dependency updates
+  - Go module dependency updates
+  - GitHub Actions version updates
+  - Security vulnerability monitoring
+  - Base Docker image update notifications
+
+### Development Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/ha-command-to-mqtt.git
+   cd ha-command-to-mqtt
+   ```
+
+2. **Install development dependencies**:
+   ```bash
+   go mod tidy
+   ```
+
+3. **Run quality checks**:
+   ```bash
+   # Install golangci-lint
+   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+   
+   # Run linting
+   golangci-lint run
+   
+   # Run tests
+   go test ./...
+   ```
+
+4. **Build locally**:
+   ```bash
+   go build -o ha-command-to-mqtt
+   ```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run quality checks locally
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+All pull requests are automatically tested through the CI pipeline.
+
 ## Troubleshooting
 
 - Check that MQTT broker is accessible
@@ -567,6 +646,7 @@ sudo systemctl start ha-command-to-mqtt
 - Monitor logs for command execution errors
 - Ensure Home Assistant has MQTT discovery enabled
 - Check MQTT topic structure matches Home Assistant expectations
+- Review GitHub Actions logs for build and deployment issues
 
 ## License
 

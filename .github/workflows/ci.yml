@@ -1,0 +1,318 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  GO_VERSION: '1.21'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Test and lint the Go application
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Install staticcheck
+      run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+    - name: Run staticcheck
+      run: staticcheck ./...
+
+    - name: Run tests
+      run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  # Build binaries for multiple platforms
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: 7
+          - goos: linux
+            goarch: arm
+            goarm: 6
+          - goos: linux
+            goarch: 386
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: 386
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        GOARM: ${{ matrix.goarm }}
+      run: |
+        # Set binary name based on OS
+        BINARY_NAME="ha-command-to-mqtt"
+        if [ "$GOOS" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        
+        # Build with version info
+        VERSION=${GITHUB_REF_NAME:-dev}
+        LDFLAGS="-w -s -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        
+        # Create output filename
+        OUTPUT_NAME="${BINARY_NAME}"
+        if [ -n "$GOARM" ]; then
+          OUTPUT_NAME="${GOOS}-${GOARCH}v${GOARM}-${BINARY_NAME}"
+        else
+          OUTPUT_NAME="${GOOS}-${GOARCH}-${BINARY_NAME}"
+        fi
+        
+        # Build the binary
+        go build -ldflags="${LDFLAGS}" -o "dist/${OUTPUT_NAME}" .
+        
+        # Make executable on Unix systems
+        if [ "$GOOS" != "windows" ]; then
+          chmod +x "dist/${OUTPUT_NAME}"
+        fi
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
+        path: dist/
+        retention-days: 30
+
+  # Build Docker images for multiple architectures
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile
+        platforms: linux/amd64,linux/arm64,linux/arm/v7
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Build Home Assistant add-on
+  addon:
+    name: Build Add-on
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build add-on binaries
+      run: |
+        mkdir -p addon-dist
+        
+        # Build for Home Assistant supported architectures
+        ARCHITECTURES="linux/amd64 linux/arm64 linux/arm/v7 linux/arm/v6 linux/386"
+        
+        for ARCH in $ARCHITECTURES; do
+          GOOS=$(echo $ARCH | cut -d'/' -f1)
+          GOARCH=$(echo $ARCH | cut -d'/' -f2)
+          
+          if [[ $GOARCH == arm* ]]; then
+            GOARM=$(echo $GOARCH | sed 's/arm//' | sed 's/v//')
+            GOARCH=arm
+            GOARM_FLAG="GOARM=$GOARM"
+          else
+            GOARM_FLAG=""
+          fi
+          
+          OUTPUT_NAME="ha-command-to-mqtt-$(echo $ARCH | sed 's/\//-/g')"
+          
+          echo "Building for $ARCH..."
+          env GOOS=$GOOS GOARCH=$GOARCH $GOARM_FLAG CGO_ENABLED=0 \
+            go build -ldflags="-w -s" -o "addon-dist/$OUTPUT_NAME" .
+        done
+        
+        # Copy add-on files
+        cp -r addon/* addon-dist/
+        
+        # Create a local build for testing
+        go build -o addon-dist/ha-command-to-mqtt .
+
+    - name: Upload add-on artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ha-addon
+        path: addon-dist/
+        retention-days: 30
+
+  # Create GitHub release with binaries
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test, build, docker]
+    if: github.event_name == 'release'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        
+        # Package binaries
+        for dir in artifacts/binaries-*; do
+          if [ -d "$dir" ]; then
+            ARCH_NAME=$(basename "$dir" | sed 's/binaries-//')
+            cd "$dir"
+            for file in *; do
+              if [ -f "$file" ]; then
+                # Create archive based on OS
+                if [[ $file == *windows* ]]; then
+                  zip "../../release-assets/${ARCH_NAME}.zip" "$file"
+                else
+                  tar -czf "../../release-assets/${ARCH_NAME}.tar.gz" "$file"
+                fi
+              fi
+            done
+            cd - > /dev/null
+          fi
+        done
+        
+        # Package add-on
+        if [ -d "artifacts/ha-addon" ]; then
+          cd artifacts/ha-addon
+          tar -czf "../../release-assets/homeassistant-addon.tar.gz" .
+          cd - > /dev/null
+        fi
+        
+        # Create checksums
+        cd release-assets
+        sha256sum * > checksums.txt
+        cd - > /dev/null
+
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-assets/*
+        generate_release_notes: true
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Security scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'

@@ -31,7 +31,7 @@ commands:
     interval: "300s"
     unit_of_measurement: ""
     device_class: "timestamp"
-    
+
   - name: "disk_usage"
     command: "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'"
     topic: "system/disk_usage"
@@ -112,14 +112,14 @@ commands:
     unit_of_measurement: "%"
     device_class: ""
     state_class: "measurement"
-    
+
   - name: "memory_usage"
     command: "free | grep Mem | awk '{printf \"%.1f\", $3/$2 * 100.0}'"
     topic: "system/memory_usage"
     interval: "60s"
     unit_of_measurement: "%"
     state_class: "measurement"
-    
+
   - name: "load_average"
     command: "uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'"
     topic: "system/load_average"

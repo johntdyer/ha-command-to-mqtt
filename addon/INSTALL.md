@@ -21,10 +21,10 @@ This guide will help you install and configure the Command to MQTT add-on in Hom
    # On your development machine
    git clone <your-repository>
    cd ha-command-to-mqtt
-   
+
    # Build the add-on
    ./addon/build.sh
-   
+
    # Copy to Home Assistant (adjust paths as needed)
    scp -r addon/ root@your-ha-ip:/addons/command-to-mqtt/
    ```
@@ -88,7 +88,7 @@ This guide will help you install and configure the Command to MQTT add-on in Hom
        interval: "300s"
        unit_of_measurement: ""
        device_class: "timestamp"
-       
+
      - name: "cpu_temperature"
        command: "cat /sys/class/thermal/thermal_zone0/temp | awk '{print $1/1000}'"
        topic: "system/cpu_temp"
@@ -96,7 +96,7 @@ This guide will help you install and configure the Command to MQTT add-on in Hom
        unit_of_measurement: "°C"
        device_class: "temperature"
        state_class: "measurement"
-       
+
      - name: "memory_usage"
        command: "free | grep Mem | awk '{printf \"%.1f\", $3/$2 * 100.0}'"
        topic: "system/memory_usage"
@@ -116,10 +116,10 @@ For monitoring remote systems:
    ```bash
    # Generate SSH key pair if you don't have one
    ssh-keygen -t ed25519 -f ~/.ssh/ha_command_key
-   
+
    # Copy public key to target systems
    ssh-copy-id -i ~/.ssh/ha_command_key.pub user@target-host
-   
+
    # Copy private key to Home Assistant shared directory
    scp ~/.ssh/ha_command_key root@ha-ip:/usr/share/hassio/share/ssh_keys/
    ```
@@ -134,7 +134,7 @@ For monitoring remote systems:
          user: "pi"
          key_path: "/share/ssh_keys/ha_command_key"
          timeout: "30s"
-         
+
        - name: "linux-server"
          host: "192.168.1.101"
          port: 22
@@ -151,7 +151,7 @@ For monitoring remote systems:
        unit_of_measurement: "°C"
        device_class: "temperature"
        state_class: "measurement"
-       
+
      - name: "server_load"
        command: "uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'"
        topic: "server/load_average"
@@ -172,7 +172,7 @@ commands:
     interval: "1800s"  # Every 30 minutes
     unit_of_measurement: "Mbps"
     state_class: "measurement"
-    
+
   - name: "ping_response"
     command: "ping -c 1 8.8.8.8 | tail -1| awk '{print $4}' | cut -d '/' -f 2"
     topic: "network/ping_time"
@@ -191,7 +191,7 @@ commands:
     interval: "600s"
     unit_of_measurement: "%"
     state_class: "measurement"
-    
+
   - name: "disk_free_gb"
     command: "df -BG / | tail -1 | awk '{print $4}' | sed 's/G//'"
     topic: "system/disk_free"
@@ -208,7 +208,7 @@ commands:
     command: "systemctl is-active nginx"
     topic: "services/nginx"
     interval: "120s"
-    
+
   - name: "docker_containers"
     command: "docker ps -q | wc -l"
     topic: "services/docker_containers"

@@ -69,7 +69,7 @@ commands:
     interval: "300s"
     unit_of_measurement: ""
     device_class: "timestamp"
-    
+
   - name: "cpu_usage"
     command: "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | sed 's/%us,//'"
     topic: "system/cpu_usage"

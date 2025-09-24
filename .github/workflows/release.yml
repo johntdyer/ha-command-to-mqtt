@@ -1,0 +1,328 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Create GitHub release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+      upload-url: ${{ steps.create-release.outputs.upload_url }}
+      tag-name: ${{ steps.get-version.outputs.tag-name }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version
+      id: get-version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "tag-name=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag-name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the latest tag before this one
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        
+        if [ -n "$PREVIOUS_TAG" ]; then
+          echo "## Changes since $PREVIOUS_TAG" > changelog.md
+          git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD >> changelog.md
+        else
+          echo "## Initial Release" > changelog.md
+          echo "First release of Command to MQTT" >> changelog.md
+        fi
+        
+        # Add contributor information
+        echo "" >> changelog.md
+        echo "## Contributors" >> changelog.md
+        git log --pretty=format:"- %an" $PREVIOUS_TAG..HEAD | sort -u >> changelog.md
+
+    - name: Create Release
+      id: create-release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get-version.outputs.tag-name }}
+        name: Release ${{ steps.get-version.outputs.tag-name }}
+        body_path: changelog.md
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and upload release assets
+  build-assets:
+    name: Build Release Assets
+    runs-on: ubuntu-latest
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: 7
+          - goos: linux
+            goarch: arm
+            goarm: 6
+          - goos: linux
+            goarch: 386
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: 386
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        GOARM: ${{ matrix.goarm }}
+      run: |
+        # Set version info
+        VERSION=${{ needs.create-release.outputs.tag-name }}
+        BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        GIT_COMMIT=${GITHUB_SHA}
+        
+        LDFLAGS="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}"
+        
+        # Set binary name
+        BINARY_NAME="ha-command-to-mqtt"
+        if [ "$GOOS" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        
+        # Build
+        go build -ldflags="${LDFLAGS}" -o "${BINARY_NAME}" .
+        
+        # Create archive
+        if [ -n "$GOARM" ]; then
+          ARCHIVE_NAME="${GOOS}-${GOARCH}v${GOARM}-ha-command-to-mqtt"
+        else
+          ARCHIVE_NAME="${GOOS}-${GOARCH}-ha-command-to-mqtt"
+        fi
+        
+        if [ "$GOOS" = "windows" ]; then
+          zip "${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
+          echo "ASSET_PATH=${ARCHIVE_NAME}.zip" >> $GITHUB_ENV
+        else
+          tar -czf "${ARCHIVE_NAME}.tar.gz" "${BINARY_NAME}"
+          echo "ASSET_PATH=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag-name }}
+        files: |
+          *.tar.gz
+          *.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build Home Assistant add-on package
+  build-addon-package:
+    name: Build Add-on Package
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build add-on assets
+      run: |
+        VERSION=${{ needs.create-release.outputs.tag-name }}
+        mkdir -p addon-release/command-to-mqtt
+        
+        # Update add-on version
+        sed -i "s/^version: .*/version: \"${VERSION#v}\"/" addon/config.yaml
+        
+        # Build Go binaries for HA architectures
+        ARCHITECTURES="linux/amd64 linux/arm64 linux/arm/v7 linux/arm/v6 linux/386"
+        
+        for ARCH in $ARCHITECTURES; do
+          GOOS=$(echo $ARCH | cut -d'/' -f1)
+          GOARCH=$(echo $ARCH | cut -d'/' -f2)
+          
+          if [[ $GOARCH == arm* ]]; then
+            GOARM=$(echo $GOARCH | sed 's/arm//' | sed 's/v//')
+            GOARCH=arm
+            env GOOS=$GOOS GOARCH=$GOARCH GOARM=$GOARM CGO_ENABLED=0 \
+              go build -ldflags="-w -s" -o "addon/ha-command-to-mqtt-$(echo $ARCH | sed 's/\//-/g')" .
+          else
+            env GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 \
+              go build -ldflags="-w -s" -o "addon/ha-command-to-mqtt-$(echo $ARCH | sed 's/\//-/g')" .
+          fi
+        done
+        
+        # Copy add-on files
+        cp addon/config.yaml addon-release/command-to-mqtt/
+        cp addon/DOCS.md addon-release/command-to-mqtt/
+        cp addon/Dockerfile addon-release/command-to-mqtt/
+        cp addon/run.sh addon-release/command-to-mqtt/
+        cp addon/icon.svg addon-release/command-to-mqtt/icon.png
+        cp addon/ha-command-to-mqtt* addon-release/command-to-mqtt/
+        
+        # Create repository files
+        cat > addon-release/repository.yaml << EOF
+        name: "Command to MQTT Add-on Repository"
+        url: "https://github.com/${{ github.repository }}"
+        maintainer: "${{ github.repository_owner }}"
+        EOF
+        
+        cat > addon-release/README.md << EOF
+        # Home Assistant Add-on Repository
+        
+        ## Add-ons
+        
+        - **Command to MQTT**: Execute commands and publish results to MQTT for Home Assistant sensor discovery
+        
+        ## Installation
+        
+        Add this repository to your Home Assistant:
+        
+        1. Go to Supervisor → Add-on Store → ⋮ → Repositories  
+        2. Add: \`https://github.com/${{ github.repository }}\`
+        3. Install "Command to MQTT" add-on
+        
+        ## Version: ${VERSION}
+        EOF
+        
+        # Create archive
+        cd addon-release
+        tar -czf "../homeassistant-addon-${VERSION}.tar.gz" .
+        cd ..
+
+    - name: Upload Add-on Package
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag-name }}
+        files: homeassistant-addon-*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Create checksums file
+  create-checksums:
+    name: Create Checksums
+    runs-on: ubuntu-latest
+    needs: [create-release, build-assets, build-addon-package]
+    steps:
+    - name: Download release assets
+      uses: robinraju/release-downloader@v1.8
+      with:
+        tag: ${{ needs.create-release.outputs.tag-name }}
+        fileName: "*"
+        out-file-path: "assets"
+
+    - name: Create checksums
+      run: |
+        cd assets
+        sha256sum * > checksums.txt
+        cd ..
+
+    - name: Upload checksums
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.create-release.outputs.tag-name }}
+        files: assets/checksums.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Trigger add-on build workflow
+  trigger-addon-build:
+    name: Trigger Add-on Build
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+    - name: Trigger add-on workflow
+      uses: actions/github-script@v6
+      with:
+        script: |
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'addon-release.yml',
+            ref: 'main',
+            inputs: {
+              version: '${{ needs.create-release.outputs.tag-name }}'
+            }
+          });
+
+  # Notify on completion
+  notify:
+    name: Notify Release Complete
+    runs-on: ubuntu-latest
+    needs: [create-release, build-assets, build-addon-package, create-checksums]
+    if: always()
+    steps:
+    - name: Create notification comment
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const tag = '${{ needs.create-release.outputs.tag-name }}';
+          const success = '${{ job.status }}' === 'success';
+          
+          const body = success 
+            ? `🎉 Release ${tag} has been successfully created and published!
+            
+            **Available Downloads:**
+            - Binary releases for multiple platforms
+            - Home Assistant add-on package
+            - Docker images
+            - Source code
+            
+            **Next Steps:**
+            - Update documentation if needed
+            - Announce the release
+            - Monitor for any issues`
+            : `❌ Release ${tag} encountered issues during publication. Please check the workflow logs.`;
+            
+          // Create a discussion or issue about the release
+          await github.rest.repos.createRelease({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag_name: tag,
+            body: body
+          });
